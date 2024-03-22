@@ -62,6 +62,12 @@ type KerberosConfig struct {
 	KeyTabPath  string `mapstructure:"keytab_file"`
 }
 
+func (c *AWSMSKConfig) Token() (*sarama.AccessToken, error) {
+	token, _, err := signer.GenerateAuthToken(context.TODO(), c.Region)
+
+	return &sarama.AccessToken{Token: token}, err
+}
+
 // ConfigureAuthentication configures authentication in sarama.Config.
 func ConfigureAuthentication(config Authentication, saramaConfig *sarama.Config) error {
 	if config.PlainText != nil {
@@ -114,10 +120,8 @@ func configureSASL(config SASLConfig, saramaConfig *sarama.Config) error {
 	case "PLAIN":
 		saramaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
 	case "AWS_MSK_IAM":
-		saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
-			return awsmsk.NewIAMSASLClient(config.AWSMSK.BrokerAddr, config.AWSMSK.Region, saramaConfig.ClientID)
-		}
-		saramaConfig.Net.SASL.Mechanism = awsmsk.Mechanism
+ 		saramaConfig.Net.SASL.Mechanism = sarama.SASLTypeOAuth
+		saramaConfig.Net.SASL.TokenProvider = &config.AWSMSK
 	default:
 		return fmt.Errorf(`invalid SASL Mechanism %q: can be either "PLAIN", "AWS_MSK_IAM", "SCRAM-SHA-256" or "SCRAM-SHA-512"`, config.Mechanism)
 	}
